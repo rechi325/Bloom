@@ -935,7 +935,7 @@ body.modal-open{overflow:hidden;position:fixed;width:100%}
     <div class="sub-page-hd">
       <button class="sub-back" onclick="hideMoreSub()"><i class="ti ti-arrow-left"></i></button>
       <div class="sub-page-ttl">会社管理</div>
-      <button class="btn bpk" style="padding:7px 14px;font-size:12px;margin-left:auto" onclick="openModal('m-co')">＋ 追加</button>
+      <button class="btn bpk" style="padding:7px 14px;font-size:12px;margin-left:auto" onclick="openCoModal()">＋ 追加</button>
     </div>
     <div id="colist"></div>
   </div>
@@ -1095,7 +1095,11 @@ body.modal-open{overflow:hidden;position:fixed;width:100%}
       <div class="fg"><label>会社名（請求書宛名）*</label><input type="text" id="fc-n" placeholder="株式会社〇〇マーケティング"></div>
       <div class="fg"><label>略称</label><input type="text" id="fc-s" placeholder="〇〇マーケ"></div>
       <div class="fg"><label>担当者</label><input type="text" id="fc-p" placeholder="田中様"></div>
-      <div class="fg"><label>メモ</label><input type="text" id="fc-m" placeholder="振込サイト、特記事項など"></div>
+      <div class="fg">
+        <label>振込周期</label>
+        <select id="fc-cy"></select>
+      </div>
+      <div class="fg"><label>メモ</label><textarea id="fc-m" placeholder="振込サイト、特記事項など" style="min-height:64px"></textarea></div>
     </div>
     <div class="shf"><button class="btn bgh" onclick="closeModal('m-co')">キャンセル</button><button class="btn bpk" onclick="saveCo()">登録</button></div>
   </div>
@@ -1140,8 +1144,12 @@ const today=()=>{const t=new Date();return`${t.getFullYear()}-${String(t.getMont
 let _tid=null;
 function T(msg){const e=document.getElementById('toast');e.textContent=msg;e.classList.add('show');clearTimeout(_tid);_tid=setTimeout(()=>e.classList.remove('show'),2200);}
 
-function dlb(dl,done){
+function dlb(dl,done,st){
   if(done)return`<span class="dl-ok">${fd(dl)}</span>`;if(!dl)return'';
+  // 投稿待ち以降（wait/posted/paid）は期限超過・今日締切を出さない
+  if(st&&(st==='wait'||st==='posted'||st==='paid')){
+    return`<span class="dl-ok">${fd(dl)}</span>`;
+  }
   const d=gd(dl);if(d===null)return'';
   if(d<0)return`<span class="dl-u">期限超過</span>`;
   if(d===0)return`<span class="dl-u">今日締切</span>`;
@@ -1271,7 +1279,7 @@ function rDeals(){
 function dealCardHTML(d){
   const k=d.st,s=d.subs||[],dc=s.filter(x=>x.done).length;
   const dl=d.postDl||d.draftDl||d.paydl;
-  const dls=dlb(dl,k==='paid');
+  const dls=dlb(dl,k==='paid',k);
   const pb=s.length?`<div class="spbar"><div class="spt"><div class="spf" style="width:${Math.round(dc/s.length*100)}%"></div></div><span class="spl">${dc}/${s.length}件</span></div>`:'<div style="flex:1"></div>';
   const hasDraft=d.draftText&&d.draftText.trim().length>0;
   const hasImg=d.draftImgs&&d.draftImgs.length>0;
@@ -1318,7 +1326,17 @@ function openDetForm(id){
   document.getElementById('det-ttl').textContent=isNew?'案件を追加':d.name;
   const sr=(d.subs||[]).map(s=>`<div class="sub-row" id="sr-${id}-${s.id}">
     <button class="sub-ck${s.done?' on':''}" onclick="togS(${id},${s.id})"><i class="ti ti-check"></i></button>
-    <div style="flex:1"><div class="sub-nm${s.done?' on':''}">${esc(s.name)}</div><div class="sub-dl">${s.dl?fd(s.dl):''}</div></div>
+    <div style="flex:1" onclick="editSubTask(${id},${s.id})" style="cursor:pointer">
+      <div class="sub-nm${s.done?' on':''}" id="snm-${id}-${s.id}">${esc(s.name)}</div>
+      <div class="sub-dl">${s.dl?fd(s.dl):''}</div>
+      <div id="sedit-${id}-${s.id}" style="display:none;margin-top:4px">
+        <input type="text" value="${esc(s.name)}" id="sedit-nm-${id}-${s.id}" style="width:100%;background:var(--bg4);border:none;border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;color:var(--tx1)">
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <input type="date" value="${s.dl||''}" id="sedit-dl-${id}-${s.id}" style="flex:1;background:var(--bg4);border:none;border-radius:6px;padding:6px 8px;font-size:12px;font-family:inherit;color:var(--tx1);-webkit-appearance:none">
+          <button class="bsm bsmp" onclick="saveSubEdit(${id},${s.id})">保存</button>
+        </div>
+      </div>
+    </div>
     <button class="sub-del" onclick="delS(${id},${s.id})"><i class="ti ti-x"></i></button>
   </div>`).join('');
   const stOpts=SK.map(k=>`<option value="${k}"${d.st===k?' selected':''}>${SL[k]}</option>`).join('');
@@ -1328,17 +1346,28 @@ function openDetForm(id){
     <img src="${src}" alt=""><button class="draft-img-del" onclick="delDraftImg(${id},${i})"><i class="ti ti-x" style="font-size:10px"></i></button>
   </div>`).join('');
   document.getElementById('det-body').innerHTML=`
-    ${isNew?'':`<div class="drow" style="margin-top:8px"><div class="dlbl">ステータス</div><div class="dval"><div class="st-select-wrap"><select id="e-st" class="${SCLS[d.st]}" onchange="previewSt(this)">${stOpts}</select></div></div></div>`}
+    <div class="drow" style="margin-top:8px"><div class="dlbl">ステータス</div><div class="dval"><div class="st-select-wrap"><select id="e-st" class="${SCLS[d.st]}" onchange="previewSt(this)">${stOpts}</select></div></div></div>
     <div class="drow"><div class="dlbl">受注元</div><div class="dval">
       <select id="e-co">${cos.map(c=>`<option value="${c.id}"${c.id===d.cid?' selected':''}>${esc(c.short||c.name)}</option>`).join('')}</select>
+      <button class="nco-toggle" id="nco-tog-e" onclick="togNcoE()" style="margin-top:5px">＋ 新しい会社を追加</button>
+      <div class="nco-area" id="nco-area-e" style="display:none;margin-top:8px">
+        <div class="nco-row">
+          <input type="text" id="nce-n" placeholder="会社名（請求書宛名）*">
+          <button class="bsm bsmp" onclick="addCoE()">追加</button>
+        </div>
+        <div class="f2" style="margin-top:6px">
+          <input type="text" id="nce-s" placeholder="略称" style="background:var(--bg1);border:none;border-radius:7px;padding:8px 10px;font-size:13px;width:100%;font-family:inherit;color:var(--tx1)">
+          <input type="text" id="nce-p" placeholder="担当者名" style="background:var(--bg1);border:none;border-radius:7px;padding:8px 10px;font-size:13px;width:100%;font-family:inherit;color:var(--tx1)">
+        </div>
+      </div>
     </div></div>
     <div class="drow"><div class="dlbl">案件名</div><div class="dval"><input type="text" id="e-nm" value="${esc(d.name)}"></div></div>
     <div class="drow"><div class="dlbl">媒体</div><div class="dval">
       <select id="e-md">${Object.keys(MEDIA_LABEL).map(m=>`<option value="${m}"${m===d.media?' selected':''}>${MEDIA_LABEL[m]}</option>`).join('')}</select>
     </div></div>
     <div class="drow"><div class="dlbl">報酬合計</div><div class="dval"><input type="number" id="e-am" value="${d.amount}" inputmode="numeric"></div></div>
-    <div class="drow"><div class="dlbl">初稿期限</div><div class="dval"><input type="date" id="e-dd" value="${d.draftDl||''}"></div></div>
-    <div class="drow"><div class="dlbl">投稿締切日</div><div class="dval"><input type="date" id="e-postdl" value="${d.postDl||''}"></div></div>
+    <div class="drow"><div class="dlbl">初稿期限</div><div class="dval"><input type="date" id="e-dd" value="${d.draftDl||''}" onchange="onDlChange()"></div></div>
+    <div class="drow"><div class="dlbl">投稿締切日</div><div class="dval"><input type="date" id="e-postdl" value="${d.postDl||''}" onchange="onDlChange()"></div></div>
     <div class="drow"><div class="dlbl">入金予定</div><div class="dval"><input type="date" id="e-pd" value="${d.paydl||''}"></div></div>
     <div class="drow"><div class="dlbl">入金口座</div><div class="dval"><select id="e-bk">${bankSelectHTML(d.bank)}</select></div></div>
     <div class="drow"><div class="dlbl">商品</div><div class="dval">
@@ -1458,24 +1487,26 @@ function _rsc(did){
   rDeals();
 }
 function togS(did,sid){
-  const d=deals.find(x=>x.id===did);if(!d)return;
+  const d = did==='__new__' ? _newDeal : deals.find(x=>x.id===did);if(!d)return;
   const s=d.subs.find(x=>x.id===sid);if(!s)return;
-  s.done=!s.done;saveAll();
+  s.done=!s.done;if(did!=='__new__')saveAll();
   const r=document.getElementById(`sr-${did}-${sid}`);
   if(r){r.querySelector('.sub-ck').classList.toggle('on',s.done);r.querySelector('.sub-nm').classList.toggle('on',s.done);}
   _rsc(did);
 }
 function delS(did,sid){
-  const d=deals.find(x=>x.id===did);if(!d)return;
-  d.subs=d.subs.filter(x=>x.id!==sid);saveAll();
+  const d = did==='__new__' ? _newDeal : deals.find(x=>x.id===did);if(!d)return;
+  d.subs=d.subs.filter(x=>x.id!==sid);if(did!=='__new__')saveAll();
   const r=document.getElementById(`sr-${did}-${sid}`);if(r)r.remove();
   _rsc(did);T('削除しました');
 }
 function addS(did){
-  const d=deals.find(x=>x.id===did);if(!d)return;
+  const d = did==='__new__' ? _newDeal : deals.find(x=>x.id===did);
+  if(!d)return;
   const nm=document.getElementById(`si-n-${did}`).value.trim();if(!nm){T('タスク名を入力してください');return;}
   const dl=document.getElementById(`si-d-${did}`).value;
-  const s={id:nsi++,name:nm,dl,done:false};d.subs.push(s);saveAll();
+  const s={id:nsi++,name:nm,dl,done:false};d.subs.push(s);
+  if(did!=='__new__')saveAll();
   document.getElementById(`si-n-${did}`).value='';document.getElementById(`si-d-${did}`).value='';
   const slEl=document.getElementById(`sl-${did}`);
   if(slEl)slEl.insertAdjacentHTML('beforeend',`<div class="sub-row" id="sr-${did}-${s.id}">
@@ -1510,13 +1541,16 @@ function delD(id){
 
 function dupD(id){
   const d=deals.find(x=>x.id===id);if(!d)return;
-  // Close detail and open add form pre-filled with this deal's data
   closeModal('m-det');
-  // Fill add form
-  // 複製: _newDeal にコピーデータをセットして openDetForm で開く
-  _newDeal={...d,id:'__new__',name:d.name+'（コピー）',subs:[...d.subs.map(s=>({...s}))],draftImgs:[...d.draftImgs]};
-  openModal('m-det');
-  T('案件を複製しました — 内容を確認して保存してください');
+  _newDeal={
+    ...d,id:'__new__',
+    name:d.name+'（コピー）',
+    subs:(d.subs||[]).map(s=>({...s,id:nsi++})),
+    draftImgs:[...(d.draftImgs||[])],
+    draftText:d.draftText||''
+  };
+  // openDetForm で _newDeal を開く
+  setTimeout(()=>{openDetForm('__new__');T('複製しました。内容を確認して「追加する」を押してください');},80);
 }
 
 function selMedia(btn){
@@ -1525,6 +1559,50 @@ function selMedia(btn){
   document.getElementById('fa-md').value=btn.dataset.media;
 }
 let ncoOpen=false;
+let ncoEOpen=false;
+function editSubTask(did,sid){
+  const editDiv=document.getElementById(`sedit-${did}-${sid}`);
+  const nmDiv=document.getElementById(`snm-${did}-${sid}`);
+  if(!editDiv)return;
+  const isOpen=editDiv.style.display!=='none';
+  editDiv.style.display=isOpen?'none':'block';
+  if(!isOpen){const inp=document.getElementById(`sedit-nm-${did}-${sid}`);if(inp)inp.focus();}
+}
+function saveSubEdit(did,sid){
+  const d = did==='__new__' ? _newDeal : deals.find(x=>x.id===did);if(!d)return;
+  const sub=d.subs.find(x=>x.id===sid);if(!sub)return;
+  const nm=document.getElementById(`sedit-nm-${did}-${sid}`);
+  const dl=document.getElementById(`sedit-dl-${did}-${sid}`);
+  if(nm&&nm.value.trim())sub.name=nm.value.trim();
+  if(dl)sub.dl=dl.value;
+  if(did!=='__new__')saveAll();
+  // 表示を更新
+  const nmDiv=document.getElementById(`snm-${did}-${sid}`);if(nmDiv)nmDiv.textContent=sub.name;
+  const editDiv=document.getElementById(`sedit-${did}-${sid}`);if(editDiv)editDiv.style.display='none';
+  const dlDiv=document.getElementById(`sr-${did}-${sid}`)?.querySelector('.sub-dl');
+  if(dlDiv)dlDiv.textContent=sub.dl?fd(sub.dl):'';
+  _rsc(did);T('タスクを更新しました');
+}
+
+function togNcoE(){
+  ncoEOpen=!ncoEOpen;
+  document.getElementById('nco-area-e').style.display=ncoEOpen?'block':'none';
+  document.getElementById('nco-tog-e').textContent=ncoEOpen?'× キャンセル':'＋ 新しい会社を追加';
+}
+function addCoE(){
+  const nm=document.getElementById('nce-n').value.trim();if(!nm){T('会社名を入力してください');return;}
+  const co={id:nci++,name:nm,short:document.getElementById('nce-s').value.trim(),
+    person:document.getElementById('nce-p').value.trim(),memo:'',paymentCycle:''};
+  cos.push(co);saveAll();
+  const sel=document.getElementById('e-co');
+  if(sel){sel.innerHTML=cos.map(c=>`<option value="${c.id}">${esc(c.short||c.name)}</option>`).join('');sel.value=co.id;}
+  ['nce-n','nce-s','nce-p'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
+  ncoEOpen=false;
+  const area=document.getElementById('nco-area-e');if(area)area.style.display='none';
+  const tog=document.getElementById('nco-tog-e');if(tog)tog.textContent='＋ 新しい会社を追加';
+  T('会社を追加しました');
+}
+
 function togNco(){
   ncoOpen=!ncoOpen;
   document.getElementById('nco-area').style.display=ncoOpen?'block':'none';
@@ -1532,7 +1610,7 @@ function togNco(){
 }
 function addCoI(){
   const nm=document.getElementById('nc-n').value.trim();if(!nm){T('会社名を入力してください');return;}
-  const co={id:nci++,name:nm,short:document.getElementById('nc-s').value.trim(),person:document.getElementById('nc-p').value.trim(),memo:''};
+  const co={id:nci++,name:nm,short:document.getElementById('nc-s').value.trim(),person:document.getElementById('nc-p').value.trim(),memo:'',paymentCycle:''};
   cos.push(co);saveAll();
   const sel=document.getElementById('fa-co');
   sel.innerHTML=cos.map(c=>`<option value="${c.id}">${esc(c.short||c.name)}</option>`).join('');
@@ -1542,14 +1620,19 @@ function addCoI(){
   document.getElementById('nco-tog').textContent='＋ 新しい会社を追加';T('会社を追加しました');
 }
 function openAdd(){
-  // 新規案件の一時オブジェクトを作成してoDet相当の画面を開く
   const newId = '__new__';
+  const defaultCid = cos.length?cos[0].id:null;
+  // 会社の振込周期から初期paydlを計算
+  const defaultCo = cos.find(c=>c.id===defaultCid);
+  const defaultPaydl = (defaultCo&&defaultCo.paymentCycle)
+    ? (calcPayDate(defaultCo.paymentCycle, today())||'') : '';
   _newDeal = {
-    id:newId,cid:cos.length?cos[0].id:null,
-    name:'',media:'X',amount:'',
-    draftDl:'',postDl:'',paydl:'',bank:banks.length?banks[0].name:'',
-    st:'new',prodSt:'未発送',invSt:'未提出',note:'',
-    draftText:'',draftImgs:[],subs:[]
+    id:newId, cid:defaultCid,
+    name:'', media:'X', amount:'',
+    draftDl:'', postDl:'', paydl:defaultPaydl,
+    bank:banks.length?banks[0].name:'',
+    st:'new', prodSt:'未発送', invSt:'未提出', note:'',
+    draftText:'', draftImgs:[], subs:[]
   };
   openDetForm(newId);
 }
@@ -2043,7 +2126,7 @@ function rCo(){
     return`<div class="cor" onclick="oCoDet(${c.id})">
       <div class="coi">${esc(ini)}</div>
       <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--tx1)">${esc(c.name)}</div>
-        <div style="font-size:11px;color:var(--tx2);margin-top:2px">${c.person?esc(c.person)+' · ':''}${esc(c.memo||'')}</div></div>
+        <div style="font-size:11px;color:var(--tx2);margin-top:2px">${c.person?esc(c.person)+' · ':''}${c.paymentCycle?paymentCycleLabel(c.paymentCycle)+' · ':''}${esc(c.memo||'')}</div></div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:11px;color:var(--tx2)">${cnt}件</div>
         <div style="font-size:12px;font-weight:800;color:var(--ac)">${fa(tot)}</div>
@@ -2052,31 +2135,130 @@ function rCo(){
     </div>`;
   }).join('');
 }
+
+/* ════ 振込日自動計算 ════
+   cycle: PAYMENT_CYCLES の v 値
+   baseDate: 案件の締切日（postDl / draftDl / 今日）
+   返り値: YYYY-MM-DD 文字列 or null */
+function calcPayDate(cycle, baseDate){
+  if(!cycle)return null;
+  const base = baseDate ? new Date(baseDate+'T00:00:00') : new Date();
+  const yr = base.getFullYear();
+  const mo = base.getMonth(); // 0-indexed
+
+  // 月末の最終平日を返す
+  function lastBizDay(y, m){
+    // m は 0-indexed
+    let d = new Date(y, m+1, 0); // その月の最終日
+    while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1);
+    return d;
+  }
+  function toISO(d){
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function setDay(y, m, day){
+    // m は 0-indexed。day が月末を超えたら月末にクランプ
+    const maxDay = new Date(y, m+1, 0).getDate();
+    return new Date(y, m, Math.min(day, maxDay));
+  }
+
+  switch(cycle){
+    case 'current_end':     return toISO(new Date(yr, mo+1, 0));         // 当月末
+    case 'next_end':        return toISO(new Date(yr, mo+2, 0));         // 翌月末
+    case 'next_end_biz':    return toISO(lastBizDay(yr, mo+1));          // 翌月末営業日
+    case 'current_15':      return toISO(setDay(yr, mo, 15));
+    case 'current_20':      return toISO(setDay(yr, mo, 20));
+    case 'current_25':      return toISO(setDay(yr, mo, 25));
+    case 'next_15':         return toISO(setDay(yr, mo+1, 15));
+    case 'next_20':         return toISO(setDay(yr, mo+1, 20));
+    case 'next_25':         return toISO(setDay(yr, mo+1, 25));
+    default:                return null;
+  }
+}
+
+/* 受注元会社変更時に振込日を自動セット */
+function onCoChange(selEl){
+  const cid = parseInt(selEl.value);
+  const c = cos.find(x=>x.id===cid);
+  if(!c||!c.paymentCycle)return;
+  // 基準日: 投稿締切 > 初稿期限 > 今日
+  const postDl = document.getElementById('e-postdl')?.value;
+  const draftDl= document.getElementById('e-dd')?.value;
+  const base   = postDl||draftDl||today();
+  const pd = calcPayDate(c.paymentCycle, base);
+  if(!pd)return;
+  const pdEl = document.getElementById('e-pd');
+  if(pdEl){ pdEl.value=pd; T(`振込日を自動設定: ${fd(pd)}`); }
+}
+
+/* 締切日変更時にも再計算 */
+function onDlChange(){
+  const coEl = document.getElementById('e-co');
+  if(coEl) onCoChange(coEl);
+}
+const PAYMENT_CYCLES=[
+  {v:'',l:'未設定'},
+  {v:'current_end',l:'当月末払い'},
+  {v:'next_end',l:'翌月末払い'},
+  {v:'current_15',l:'当月15日払い'},
+  {v:'current_20',l:'当月20日払い'},
+  {v:'current_25',l:'当月25日払い'},
+  {v:'next_15',l:'翌月15日払い'},
+  {v:'next_20',l:'翌月20日払い'},
+  {v:'next_25',l:'翌月25日払い'},
+  {v:'next_end_biz',l:'翌月末（最終営業日）払い'},
+  {v:'custom',l:'その他'},
+];
+function paymentCycleLabel(v){const p=PAYMENT_CYCLES.find(x=>x.v===v);return p?p.l:'未設定';}
+
 function oCoDet(id){
   const c=cos.find(x=>x.id===id);if(!c)return;
   const cnt=deals.filter(d=>d.cid===id).length;
   const tot=deals.filter(d=>d.cid===id).reduce((s,d)=>s+Number(d.amount),0);
   document.getElementById('det-ttl').textContent=c.name;
+  const cycleOpts=PAYMENT_CYCLES.map(p=>`<option value="${p.v}"${(c.paymentCycle||'')==p.v?' selected':''}>${p.l}</option>`).join('');
   document.getElementById('det-body').innerHTML=`
-    <div class="drow" style="margin-top:8px"><div class="dlbl">会社名</div><div class="dval">${esc(c.name)}</div></div>
-    <div class="drow"><div class="dlbl">略称</div><div class="dval">${esc(c.short||'—')}</div></div>
-    <div class="drow"><div class="dlbl">担当者</div><div class="dval">${esc(c.person||'—')}</div></div>
-    <div class="drow"><div class="dlbl">累計案件</div><div class="dval">${cnt}件</div></div>
-    <div class="drow"><div class="dlbl">累計報酬</div><div class="dval" style="font-weight:800;color:var(--ac)">${fa(tot)}</div></div>
-    ${c.memo?`<div class="drow"><div class="dlbl">メモ</div><div class="dval">${esc(c.memo)}</div></div>`:''}`;
+    <div class="drow" style="margin-top:8px"><div class="dlbl">会社名</div><div class="dval"><input type="text" id="co-nm" value="${esc(c.name)}"></div></div>
+    <div class="drow"><div class="dlbl">略称</div><div class="dval"><input type="text" id="co-sh" value="${esc(c.short||'')}"></div></div>
+    <div class="drow"><div class="dlbl">担当者</div><div class="dval"><input type="text" id="co-pe" value="${esc(c.person||'')}"></div></div>
+    <div class="drow"><div class="dlbl">振込周期</div><div class="dval"><select id="co-cy">${cycleOpts}</select></div></div>
+    <div class="drow"><div class="dlbl">メモ</div><div class="dval"><textarea id="co-me" style="min-height:52px">${esc(c.memo||'')}</textarea></div></div>
+    <div class="drow"><div class="dlbl">累計案件</div><div class="dval">${cnt}件　<span style="font-weight:600;color:var(--g-tx)">${fa(tot)}</span></div></div>`;
   document.getElementById('det-foot').innerHTML=`
     <button class="btn bre" onclick="delCo(${id})">削除</button>
-    <button class="btn bgh" onclick="closeModal('m-det')">閉じる</button>`;
+    <button class="btn bgh" onclick="closeModal('m-det')">閉じる</button>
+    <button class="btn bpk" onclick="saveCoDet(${id})">保存</button>`;
   openModal('m-det');
+}
+function saveCoDet(id){
+  const c=cos.find(x=>x.id===id);if(!c)return;
+  c.name=document.getElementById('co-nm').value.trim()||c.name;
+  c.short=document.getElementById('co-sh').value.trim();
+  c.person=document.getElementById('co-pe').value.trim();
+  c.paymentCycle=document.getElementById('co-cy').value;
+  c.memo=document.getElementById('co-me').value;
+  saveAll();closeModal('m-det');rCo();T('会社情報を保存しました ✓');
 }
 function delCo(id){
   if(deals.some(d=>d.cid===id)){T('この会社の案件があるため削除できません');return;}
   cos=cos.filter(x=>x.id!==id);saveAll();closeModal('m-det');rCo();T('削除しました');
 }
+function openCoModal(){
+  // フォームリセット
+  ['fc-n','fc-s','fc-p','fc-m'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  // 振込周期セレクトに選択肢を生成
+  const sel=document.getElementById('fc-cy');
+  if(sel)sel.innerHTML=PAYMENT_CYCLES.map(p=>`<option value="${p.v}">${p.l}</option>`).join('');
+  openModal('m-co');
+}
 function saveCo(){
   const nm=document.getElementById('fc-n').value.trim();if(!nm){T('会社名は必須です');return;}
   cos.push({id:nci++,name:nm,short:document.getElementById('fc-s').value.trim(),
-    person:document.getElementById('fc-p').value.trim(),memo:document.getElementById('fc-m').value.trim()});
+    person:document.getElementById('fc-p').value.trim(),
+    paymentCycle:document.getElementById('fc-cy').value,
+    memo:document.getElementById('fc-m').value.trim()});
   saveAll();closeModal('m-co');rCo();T('会社を登録しました');
 }
 
