@@ -1048,63 +1048,6 @@ body.modal-open{overflow:hidden;position:fixed;width:100%}
   </div>
 </div>
 
-<!-- Add deal -->
-<div class="modal-bg" id="m-add">
-  <div class="sheet">
-    <div class="sh"></div>
-    <div class="shd"><div class="sht">案件を追加</div><button class="icon-btn" onclick="closeModal('m-add')"><i class="ti ti-x"></i></button></div>
-    <div class="shb" style="padding:16px 18px">
-      <!-- AI AUTO-FILL -->
-      <div class="ai-section">
-        <div class="ai-hd">
-          <div class="ai-hd-icon"><i class="ti ti-sparkles" style="font-size:13px;color:#fff"></i></div>
-          <div><div class="ai-hd-title">AI自動入力</div><div class="ai-hd-sub">DMをペーストすると各項目を自動入力</div></div>
-        </div>
-        <textarea class="ai-textarea" id="ai-paste" placeholder="例）&#10;ご依頼内容：COSRX商品PR&#10;報酬：50,000円&#10;初稿期限：6月10日　投稿日：6月15日&#10;媒体：Instagram&#10;…"></textarea>
-        <button class="ai-btn" id="ai-btn" onclick="runAI()"><i class="ti ti-wand" style="font-size:16px"></i>自動入力する</button>
-        <div class="ai-result" id="ai-result"></div>
-      </div>
-      <!-- FORM -->
-      <div class="fg">
-        <label>受注元会社 *</label>
-        <select id="fa-co"></select>
-        <button class="nco-toggle" id="nco-tog" onclick="togNco()">＋ 新しい会社を追加</button>
-        <div class="nco-area" id="nco-area" style="display:none">
-          <div class="nco-row">
-            <input type="text" id="nc-n" placeholder="会社名（請求書宛名）*">
-            <button class="bsm bsmp" onclick="addCoI()">追加</button>
-          </div>
-          <div class="f2">
-            <input type="text" id="nc-s" placeholder="略称" style="background:var(--bg1);border:1px solid var(--bg2);border-radius:7px;padding:9px 10px;font-size:13px;width:100%;font-family:inherit;color:var(--tx1)">
-            <input type="text" id="nc-p" placeholder="担当者名" style="background:var(--bg1);border:1px solid var(--bg2);border-radius:7px;padding:9px 10px;font-size:13px;width:100%;font-family:inherit;color:var(--tx1)">
-          </div>
-        </div>
-      </div>
-      <div class="fg"><label>案件名（商材）*</label><input type="text" id="fa-nm" placeholder="例：COSRX 春キャンペーン"></div>
-      <div class="fg">
-        <label>媒体</label>
-        <div class="media-chips">
-          <button class="mc-chip mc-chip-x sel" data-media="X" onclick="selMedia(this)"><i class="ti ti-brand-x" style="font-size:16px"></i> X</button>
-          <button class="mc-chip mc-chip-ig" data-media="Instagram" onclick="selMedia(this)"><i class="ti ti-brand-instagram" style="font-size:16px"></i> IG</button>
-          <button class="mc-chip mc-chip-tk" data-media="TikTok" onclick="selMedia(this)"><i class="ti ti-brand-tiktok" style="font-size:16px"></i> TT</button>
-          <button class="mc-chip mc-chip-yt" data-media="YouTube" onclick="selMedia(this)"><i class="ti ti-brand-youtube" style="font-size:16px"></i> YT</button>
-          <button class="mc-chip mc-chip-other" data-media="複数・その他" onclick="selMedia(this)"><i class="ti ti-layers-intersect" style="font-size:16px"></i> 他</button>
-        </div>
-        <input type="hidden" id="fa-md" value="X">
-      </div>
-      <div class="fg"><label>報酬合計（円）*</label><input type="number" id="fa-am" placeholder="50000" min="0" inputmode="numeric"></div>
-      <div class="f2">
-        <div class="fg"><label>初稿期限</label><input type="date" id="fa-dd"></div>
-        <div class="fg"><label>投稿締切日</label><input type="date" id="fa-postdl"></div>
-      </div>
-      <div class="fg"><label>入金予定日</label><input type="date" id="fa-pd"></div>
-      <div class="fg"><label>入金口座</label><select id="fa-bk"></select></div>
-      <div class="fg"><label>備考</label><textarea id="fa-nt" placeholder="連絡事項など"></textarea></div>
-    </div>
-    <div class="shf"><button class="btn bgh" onclick="closeModal('m-add')">キャンセル</button><button class="btn bpk" onclick="saveD()">追加する</button></div>
-  </div>
-</div>
-
 <!-- Add gift -->
 <div class="modal-bg" id="m-gift">
   <div class="sheet">
@@ -1337,6 +1280,7 @@ function dealCardHTML(d){
     <div class="dc-top">
       <button class="dc-dot ${SD[k]}" data-adv-id="${d.id}"><i class="ti ${SI[k]}" style="font-size:15px;pointer-events:none"></i></button>
       <div class="dc-main">
+        <div style="font-size:10px;font-weight:400;color:var(--tx3);letter-spacing:.02em;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(cos.find(c=>c.id===d.cid)?.short||cos.find(c=>c.id===d.cid)?.name||'')}</div>
         <div class="dc-name">${esc(d.name)}</div>
         <div class="dc-meta">${medBadge(d.media)}<span class="pill ${SP[k]}">${SL[k]}</span>${dls}</div>
       </div>
@@ -1366,9 +1310,12 @@ function dealListClick(e){
 }
 
 /* Deal detail modal with embedded draft */
-function oDet(id){
-  const d=deals.find(x=>x.id===id);if(!d)return;
-  document.getElementById('det-ttl').textContent=d.name;
+function oDet(id){openDetForm(id);}
+function openDetForm(id){
+  const d = id==='__new__' ? _newDeal : deals.find(x=>x.id===id);
+  if(!d)return;
+  const isNew = id==='__new__';
+  document.getElementById('det-ttl').textContent=isNew?'案件を追加':d.name;
   const sr=(d.subs||[]).map(s=>`<div class="sub-row" id="sr-${id}-${s.id}">
     <button class="sub-ck${s.done?' on':''}" onclick="togS(${id},${s.id})"><i class="ti ti-check"></i></button>
     <div style="flex:1"><div class="sub-nm${s.done?' on':''}">${esc(s.name)}</div><div class="sub-dl">${s.dl?fd(s.dl):''}</div></div>
@@ -1381,9 +1328,7 @@ function oDet(id){
     <img src="${src}" alt=""><button class="draft-img-del" onclick="delDraftImg(${id},${i})"><i class="ti ti-x" style="font-size:10px"></i></button>
   </div>`).join('');
   document.getElementById('det-body').innerHTML=`
-    <div class="drow" style="margin-top:8px"><div class="dlbl">ステータス</div><div class="dval">
-      <div class="st-select-wrap"><select id="e-st" class="${SCLS[d.st]}" onchange="previewSt(this)">${stOpts}</select></div>
-    </div></div>
+    ${isNew?'':`<div class="drow" style="margin-top:8px"><div class="dlbl">ステータス</div><div class="dval"><div class="st-select-wrap"><select id="e-st" class="${SCLS[d.st]}" onchange="previewSt(this)">${stOpts}</select></div></div></div>`}
     <div class="drow"><div class="dlbl">受注元</div><div class="dval">
       <select id="e-co">${cos.map(c=>`<option value="${c.id}"${c.id===d.cid?' selected':''}>${esc(c.short||c.name)}</option>`).join('')}</select>
     </div></div>
@@ -1402,6 +1347,19 @@ function oDet(id){
     <div class="drow"><div class="dlbl">請求書</div><div class="dval">
       <select id="e-iv">${['未提出','提出済み'].map(s=>`<option${s===d.invSt?' selected':''}>${s}</option>`).join('')}</select>
     </div></div>
+    ${isNew?`<div class="drow" style="border:none;padding-top:10px">
+      <div style="width:100%">
+        <div class="ai-section" style="margin-bottom:0">
+          <div class="ai-hd">
+            <div class="ai-hd-icon"><i class="ti ti-sparkles" style="font-size:12px;color:#fff"></i></div>
+            <div><div class="ai-hd-title">AI自動入力</div><div class="ai-hd-sub">DMをペーストして各項目を自動入力</div></div>
+          </div>
+          <textarea class="ai-textarea" id="ai-paste" placeholder="例）COSRX商品PR&#10;報酬：50,000円&#10;初稿期限：6月10日…"></textarea>
+          <button class="ai-btn" id="ai-btn" onclick="runAI()"><i class="ti ti-wand" style="font-size:15px"></i>自動入力する</button>
+          <div class="ai-result" id="ai-result"></div>
+        </div>
+      </div>
+    </div>`:''}
     <div class="drow" style="border:none"><div class="dlbl">備考</div><div class="dval"><textarea id="e-nt">${esc(d.note||'')}</textarea></div></div>
     <div class="sub-sec">
       <div class="sub-hd">
@@ -1434,7 +1392,10 @@ function oDet(id){
 
       </div>
     </div>`;
-  document.getElementById('det-foot').innerHTML=`
+  document.getElementById('det-foot').innerHTML=isNew?`
+    <button class="btn bgh" onclick="closeModal('m-det')">キャンセル</button>
+    <button class="btn bpk" onclick="saveDNew()">追加する</button>
+  `:`
     <button class="btn bre" onclick="delD(${id})">削除</button>
     <button class="btn bgh" style="padding:10px 12px" onclick="dupD(${id})" title="複製"><i class="ti ti-copy" style="font-size:15px"></i></button>
     <button class="btn bgh" onclick="closeModal('m-det')">閉じる</button>
@@ -1552,24 +1513,9 @@ function dupD(id){
   // Close detail and open add form pre-filled with this deal's data
   closeModal('m-det');
   // Fill add form
-  document.getElementById('fa-co').innerHTML=cos.map(c=>`<option value="${c.id}">${esc(c.short||c.name)}</option>`).join('');
-  const coEl=document.getElementById('fa-co');if(coEl)coEl.value=d.cid;
-  document.getElementById('fa-bk').innerHTML=bankSelectHTML(d.bank);
-  document.getElementById('fa-nm').value=d.name+'（コピー）';
-  document.getElementById('fa-am').value=d.amount;
-  document.getElementById('fa-dd').value=d.draftDl||'';
-  document.getElementById('fa-postdl').value=d.postDl||'';
-  document.getElementById('fa-pd').value=d.paydl||'';
-  document.getElementById('fa-nt').value=d.note||'';
-  document.getElementById('fa-md').value=d.media||'X';
-  document.querySelectorAll('.mc-chip').forEach(c=>c.classList.remove('sel'));
-  const mmap={X:'mc-chip-x',Instagram:'mc-chip-ig',TikTok:'mc-chip-tk',YouTube:'mc-chip-yt','複数・その他':'mc-chip-other'};
-  const mcls=mmap[d.media];if(mcls){const el=document.querySelector('.'+mcls);if(el)el.classList.add('sel');}
-  document.getElementById('ai-paste').value='';
-  document.getElementById('ai-result').className='ai-result';
-  ncoOpen=false;document.getElementById('nco-area').style.display='none';
-  document.getElementById('nco-tog').textContent='＋ 新しい会社を追加';
-  openModal('m-add');
+  // 複製: _newDeal にコピーデータをセットして openDetForm で開く
+  _newDeal={...d,id:'__new__',name:d.name+'（コピー）',subs:[...d.subs.map(s=>({...s}))],draftImgs:[...d.draftImgs]};
+  openModal('m-det');
   T('案件を複製しました — 内容を確認して保存してください');
 }
 
@@ -1596,31 +1542,52 @@ function addCoI(){
   document.getElementById('nco-tog').textContent='＋ 新しい会社を追加';T('会社を追加しました');
 }
 function openAdd(){
-  document.getElementById('fa-co').innerHTML=cos.map(c=>`<option value="${c.id}">${esc(c.short||c.name)}</option>`).join('');
-  document.getElementById('fa-bk').innerHTML=bankSelectHTML('');
-  ['fa-nm','fa-am','fa-dd','fa-postdl','fa-pd','fa-nt'].forEach(i=>document.getElementById(i).value='');
-  document.getElementById('fa-md').value='X';
-  document.querySelectorAll('.mc-chip').forEach(c=>c.classList.remove('sel'));
-  document.querySelector('.mc-chip-x').classList.add('sel');
-  document.getElementById('ai-paste').value='';
-  document.getElementById('ai-result').className='ai-result';
-  ncoOpen=false;document.getElementById('nco-area').style.display='none';
-  document.getElementById('nco-tog').textContent='＋ 新しい会社を追加';
-  openModal('m-add');
+  // 新規案件の一時オブジェクトを作成してoDet相当の画面を開く
+  const newId = '__new__';
+  _newDeal = {
+    id:newId,cid:cos.length?cos[0].id:null,
+    name:'',media:'X',amount:'',
+    draftDl:'',postDl:'',paydl:'',bank:banks.length?banks[0].name:'',
+    st:'new',prodSt:'未発送',invSt:'未提出',note:'',
+    draftText:'',draftImgs:[],subs:[]
+  };
+  openDetForm(newId);
 }
-function saveD(){
-  const nm=document.getElementById('fa-nm').value.trim();
-  const am=parseFloat(document.getElementById('fa-am').value);
+let _newDeal=null;
+function saveDNew(){
+  // 編集画面と同じフィールドIDから読み取る
+  const nm=document.getElementById('e-nm').value.trim();
+  const am=parseFloat(document.getElementById('e-am').value);
   if(!nm||isNaN(am)){T('案件名と報酬金額は必須です');return;}
-  deals.push({id:ndi++,cid:parseInt(document.getElementById('fa-co').value),name:nm,
-    media:document.getElementById('fa-md').value,amount:am,
-    draftDl:document.getElementById('fa-dd').value,
-    postDl:document.getElementById('fa-postdl').value,
-    paydl:document.getElementById('fa-pd').value,bank:document.getElementById('fa-bk').value,
-    st:'new',prodSt:'未発送',invSt:'未提出',note:document.getElementById('fa-nt').value,
-    draftText:'',draftImgs:[],subs:[]});
-  saveAll();closeModal('m-add');bTabs();rDeals();rDash();T('案件を追加しました');
+  const d={
+    id:ndi++,
+    cid:parseInt(document.getElementById('e-co').value)||(_newDeal?_newDeal.cid:null),
+    name:nm,
+    media:document.getElementById('e-md').value,
+    amount:am,
+    draftDl:document.getElementById('e-dd').value,
+    postDl:document.getElementById('e-postdl').value,
+    paydl:document.getElementById('e-pd').value,
+    bank:document.getElementById('e-bk').value,
+    st:'new',
+    prodSt:document.getElementById('e-pr').value,
+    invSt:document.getElementById('e-iv').value,
+    note:document.getElementById('e-nt').value,
+    draftText:'',draftImgs:[],subs:[]
+  };
+  // サブタスクが追加されていれば引き継ぐ
+  if(_newDeal&&_newDeal.subs&&_newDeal.subs.length){
+    d.subs=_newDeal.subs;
+  }
+  // 下書きテキスト
+  const ta=document.getElementById('dd-ta-__new__');
+  if(ta)d.draftText=ta.value;
+  d.draftImgs=(_newDeal&&_newDeal.draftImgs)||[];
+  deals.push(d);
+  _newDeal=null;
+  saveAll();closeModal('m-det');bTabs();rDeals();rDash();T('案件を追加しました');
 }
+function saveD(){saveDNew();}
 
 /* ══════════ AI AUTO-FILL ══════════ */
 function saveApiKey(){
@@ -1734,19 +1701,19 @@ function localParse(text){
 
 function applyParsed(p){
   if(p.brand){
-    const nm=document.getElementById('fa-nm');if(nm&&!nm.value)nm.value=p.brand;}
+    const nm=document.getElementById('e-nm');if(nm&&!nm.value)nm.value=p.brand;}
   if(p.amount){
-    const am=document.getElementById('fa-am');if(am&&!am.value)am.value=p.amount;}
-  if(p.draftDl){const dd=document.getElementById('fa-dd');if(dd&&!dd.value)dd.value=p.draftDl;}
-  if(p.postDl){const pd=document.getElementById('fa-postdl');if(pd&&!pd.value)pd.value=p.postDl;}
+    const am=document.getElementById('e-am');if(am&&!am.value)am.value=p.amount;}
+  if(p.draftDl){const dd=document.getElementById('e-dd');if(dd&&!dd.value)dd.value=p.draftDl;}
+  if(p.postDl){const pd=document.getElementById('e-postdl');if(pd&&!pd.value)pd.value=p.postDl;}
   if(p.media){
-    document.getElementById('fa-md').value=p.media;
+    document.getElementById('e-md').value=p.media;
     document.querySelectorAll('.mc-chip').forEach(c=>c.classList.remove('sel'));
     const map={X:'mc-chip-x',Instagram:'mc-chip-ig',TikTok:'mc-chip-tk',YouTube:'mc-chip-yt','複数・その他':'mc-chip-other'};
     const cls=map[p.media];
     if(cls){const el=document.querySelector(`.${cls}`);if(el)el.classList.add('sel');}
   }
-  if(p.note){const nt=document.getElementById('fa-nt');if(nt&&!nt.value)nt.value=p.note;}
+  if(p.note){const nt=document.getElementById('e-nt');if(nt&&!nt.value)nt.value=p.note;}
 }
 
 
