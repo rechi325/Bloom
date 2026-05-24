@@ -1695,38 +1695,74 @@ async function runAI(){
   if(geminiKey){
     try{
       const _td=today();const _dn=['日','月','火','水','木','金','土'][new Date(_td+'T00:00:00').getDay()];
-      const prompt=`あなたはインフルエンサー向けPR案件管理アシスタントです。
-以下のDM文章から情報を抽出し、JSONのみを返してください（コードブロック・前置き・説明文不要）。
+      const prompt=`あなたはインフルエンサー向けPR案件管理の専門アシスタントです。
+DMや依頼メッセージから案件情報を正確に抽出し、JSONのみを返してください。
+余分な文字・コードブロック・説明文は一切不要です。
 
-## 基準日（最重要・厳守）
+## 基準日（厳守）
 本日は${_td}（${_dn}曜日）です。
-DM内の相対表現を以下ルールで厳密にYYYY-MM-DD形式へ変換してください：
-- 「来週○曜日」→ 基準日の翌週の○曜日
-- 「今週末」「今週土曜」→ 基準日から最も近い土曜日
-- 「今月末」「月末」→ 基準日の月の最終日
-- 「○日」のみ→ 基準日の月の○日（過去日なら翌月）
-- 「○月○日」→ 基準日の年の○月○日
+相対的な日付表現は必ずこの基準日から計算してYYYY-MM-DD形式に変換してください。
+変換ルール：
+- 「来週月曜」→ 翌週月曜日の日付
+- 「今週末」→ 直近の土曜日
+- 「月末」「今月末」→ 当月最終日
+- 「○日」のみ → 当月○日（既に過ぎていれば翌月）
+- 「○月○日」→ 当年の○月○日
 - 「○週間後」→ 基準日＋○×7日
 
-## 抽出するJSONキー（不明ならnull）
-- brand: ブランド名または商品名
-- amount: 報酬金額（数値のみ）
-- draftDl: 初稿・ドラフト期限（YYYY-MM-DD）
-- postDl: 投稿・公開期限（YYYY-MM-DD）
-- media: TikTok / Instagram / X / YouTube / 複数・その他 のいずれか
-- note: ハッシュタグ・投稿条件・特記事項
+## 抽出するJSONキー（不明・記載なしはnull）
+- brand: ブランド名・企業名・商品名
+- amount: 報酬金額（数値のみ。税込/税抜の区別は無視）
+- draftDl: 初稿・ドラフト・確認用素材の提出期限（YYYY-MM-DD）
+- postDl: 実際の投稿・公開・配信期限（YYYY-MM-DD）
+- media: 以下から最も適切な1つを選ぶ → TikTok / Instagram / X / YouTube / 複数・その他
+- note: ハッシュタグ・投稿条件・禁止事項・その他特記事項（文字列）
 
-## DM文章
+## 出力例（Few-shot）
+
+入力例1:
+「この度はCOSRXのPRをお願いしたく連絡しました。
+商品：スネイルムチン96エッセンス
+媒体：Instagram フィード＋ストーリーズ
+報酬：45,000円（税込）
+初稿確認：6月5日まで
+投稿日：6月10日
+#COSRX #PR #スキンケア を必ずつけてください」
+
+出力例1:
+{"brand":"COSRX","amount":45000,"draftDl":"2026-06-05","postDl":"2026-06-10","media":"Instagram","note":"#COSRX #PR #スキンケア 必須"}
+
+入力例2:
+「LANEIGEの新作リップPRのご依頼です。
+TikTokにて来週金曜日までに投稿をお願いしたいです。
+初稿は来週月曜にご共有ください。
+謝礼は30,000円でお願いします。」
+
+出力例2:
+{"brand":"LANEIGE","amount":30000,"draftDl":"${(()=>{const d=new Date(_td+'T00:00:00');const day=d.getDay();const toMon=((1-day+7)%7)||7;const r=new Date(d);r.setDate(d.getDate()+toMon+7);return r.toISOString().slice(0,10);})()}","postDl":"${(()=>{const d=new Date(_td+'T00:00:00');const day=d.getDay();const toFri=((5-day+7)%7)||7;const r=new Date(d);r.setDate(d.getDate()+toFri+7);return r.toISOString().slice(0,10);})()}","media":"TikTok","note":null}
+
+入力例3:
+「お世話になっております。
+今月末までにYouTubeショート動画でご紹介いただきたいです。
+商品名：センテラソリューションアンプル（SKIN1004）
+報酬：¥80,000
+ハッシュタグ等の条件は後ほど共有します」
+
+出力例3:
+{"brand":"SKIN1004","amount":80000,"draftDl":null,"postDl":"${(()=>{const d=new Date(_td+'T00:00:00');return new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10);})()}","media":"YouTube","note":"ハッシュタグ条件は後ほど共有"}
+
+## 実際のDM
 ${text}`;
-      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,{
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.1}})
+        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.0,responseMimeType:'application/json'}})
       });
       const data=await res.json();
       const txt=data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-      const m=txt.match(/\{[\s\S]*\}/);
-      if(m)parsed=JSON.parse(m[0]);
+      try{parsed=JSON.parse(txt);}catch(_){
+        const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);
+      }
     }catch(e){console.log('Gemini error',e);}
   }
 
@@ -1813,30 +1849,65 @@ async function runGiftAI(){
   if(geminiKey){
     try{
       const _td2=today();const _dn2=['日','月','火','水','木','金','土'][new Date(_td2+'T00:00:00').getDay()];
-      const prompt=`あなたはインフルエンサーのギフティング管理アシスタントです。
-以下のメッセージからギフティング情報を抽出し、JSONのみを返してください（前置き不要）。
+      const prompt=`あなたはインフルエンサー向けギフティング管理の専門アシスタントです。
+商品提供・ギフティングの依頼メッセージから情報を抽出し、JSONのみを返してください。
+余分な文字・説明・コードブロックは不要です。
 
-## 基準日（最重要）
-本日は${_td2}（${_dn2}曜日）です。相対表現（「来週」「月末」「○日以内」等）はこの基準日から厳密に計算してYYYY-MM-DD形式に変換してください。
+## 基準日（厳守）
+本日は${_td2}（${_dn2}曜日）です。
+相対的な日付は基準日から計算してYYYY-MM-DD形式に変換してください。
+（「来週」→+7日、「月末」→当月末日、「○日以内」→基準日+○日）
 
-## 抽出するJSONキー（不明ならnull）
-- brand: ブランド名
-- name: 商品名
+## 抽出するJSONキー（不明・記載なしはnull）
+- brand: ブランド名・企業名
+- name: 商品名（正式名称）
 - arr: 到着予定日（YYYY-MM-DD）
-- must: "must"=投稿必須 / "hope"=任意・推奨 / "none"=不要
-- postdate: 投稿目安日・締切日（YYYY-MM-DD）
-- note: ハッシュタグ・投稿条件
+- must: 投稿義務 → "must"=必須 / "hope"=任意・推奨 / "none"=不要・記載なし
+- postdate: 投稿目安日・投稿期限（YYYY-MM-DD）
+- note: ハッシュタグ・投稿条件・禁止事項（文字列）
 
-## メッセージ
+## 出力例（Few-shot）
+
+入力例1:
+「この度はLANEIGEより商品をお送りさせていただきます。
+商品名：ウォータースリーピングマスク 70ml
+来週中にお届け予定です。
+投稿は必須ではありませんが、月末を目安にご紹介いただけますと幸いです。
+#LANEIGE #ランジュ #PR をつけていただけると助かります。」
+
+出力例1:
+{"brand":"LANEIGE","name":"ウォータースリーピングマスク 70ml","arr":null,"must":"hope","postdate":"${(()=>{const d=new Date(_td2+'T00:00:00');return new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10);})()}","note":"#LANEIGE #ランジュ #PR"}
+
+入力例2:
+「COSRXよりご提供のご案内です。
+・商品：スネイルムチン96エッセンス 96ml
+・発送：5月20日予定
+・投稿期限：6月5日までに必ずお願いします（必須）
+・ハッシュタグ：#COSRX #PR #cosrxjapan」
+
+出力例2:
+{"brand":"COSRX","name":"スネイルムチン96エッセンス 96ml","arr":"2026-05-20","must":"must","postdate":"2026-06-05","note":"#COSRX #PR #cosrxjapan"}
+
+入力例3:
+「Beauty of Joseonの新作サンクリームをお送りします。
+到着は来週以降になる予定です。
+投稿いただける場合は #BeautyofJoseon #朝鮮美女 をつけてください。
+投稿の有無はお任せします。」
+
+出力例3:
+{"brand":"Beauty of Joseon","name":"サンクリーム","arr":null,"must":"none","postdate":null,"note":"#BeautyofJoseon #朝鮮美女 投稿任意"}
+
+## 実際のメッセージ
 ${text}`;
-      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,{
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.1}})
+        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.0,responseMimeType:'application/json'}})
       });
       const data=await res.json();
       const txt=data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
-      const m=txt.match(/\{[\s\S]*\}/);
-      if(m)parsed=JSON.parse(m[0]);
+      try{parsed=JSON.parse(txt);}catch(_){
+        const m=txt.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);
+      }
     }catch(e){console.log('Gemini gift error',e);}
   }
   if(!parsed)parsed=localParseGift(text);
